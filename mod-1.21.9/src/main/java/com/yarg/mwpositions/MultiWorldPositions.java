@@ -307,17 +307,50 @@ public class MultiWorldPositions implements DedicatedServerModInitializer {
             });
         }
 
-        // Connection events (unchanged)
+        // Save position when player disconnects
+        ServerPlayConnectionEvents.DISCONNECT.register((handler, server) -> {
+            var player = handler.getPlayer();
+            String dimensionKey = player.getEntityWorld().getRegistryKey().getValue().toString();
+
+            // Don't save position if in a hub world
+            if (!config.isHubWorld(dimensionKey)) {
+                positionStorage.savePosition(player);
+                LOGGER.info("Saved disconnect position for {} in {}",
+                        player.getName().getString(), dimensionKey);
+            } else {
+                LOGGER.info("Skipped saving position for {} (in hub world: {})",
+                        player.getName().getString(), dimensionKey);
+            }
+
+            // Persist inventories for current group if applicable
+            String gid = config.getGroupIdForWorld(dimensionKey);
+            if (gid != null) {
+                WorldGroup g = config.findGroupByMember(dimensionKey);
+                if (g != null && g.inventoryProfile) {
+                    inventoryStorage.saveForGroup(player, gid);
+                }
+            }
+
+            // Write to disk
+            positionStorage.savePlayerData(player.getUuid());
+        });
+
+        // Load player data when they join
         ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> {
-            // Load player data on join
-            try {
-                positionStorage.loadPlayerData(handler.player.getUuid());
-                LOGGER.info("Loaded positions for player {}", handler.player.getName().getString());
-            } catch (Throwable t) {
-                LOGGER.error("[MWP] Failed to load player data for {}", handler.player.getName().getString(), t);
+            ServerPlayerEntity player = handler.getPlayer();
+            positionStorage.loadPlayerData(player.getUuid());
+            // Load inventory profile for current group if enabled
+            String dim = player.getEntityWorld().getRegistryKey().getValue().toString();
+            String gid = config.getGroupIdForWorld(dim);
+            if (gid != null) {
+                WorldGroup g = config.findGroupByMember(dim);
+                if (g != null && g.inventoryProfile) {
+                    inventoryStorage.loadForGroup(player, gid);
+                }
             }
         });
 
+        // Save all data before shutdown
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             try {
                 positionStorage.saveAll(server);
