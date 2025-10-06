@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(./gradlew dependencies:*)",
+      "WebFetch(domain:maven.fabricmc.net)",
+      "Bash(./gradlew:*)",
+      "WebFetch(domain:fabricmc.net)",
+      "Bash(cat:*)",
+      "Read(//c/Users/amazi/.gradle/caches/**)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
