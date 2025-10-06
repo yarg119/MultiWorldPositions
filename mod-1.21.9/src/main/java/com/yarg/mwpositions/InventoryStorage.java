@@ -85,15 +85,57 @@ public class InventoryStorage {
             // Create a list to hold loaded items
             DefaultedList<ItemStack> inventory = DefaultedList.ofSize(player.getInventory().size(), ItemStack.EMPTY);
 
-            // Manually read inventory from NBT (Inventories helper API changed in 1.21.9)
-            net.minecraft.nbt.NbtList itemsList = root.getListOrEmpty("Items");
-            for (int i = 0; i < itemsList.size(); i++) {
-                NbtCompound itemNbt = itemsList.getCompound(i).orElse(new NbtCompound());
-                int slot = itemNbt.getByte("Slot", (byte) 0) & 255;
-                if (slot >= 0 && slot < inventory.size()) {
-                    NbtCompound stackNbt = itemNbt.getCompound("Item").orElse(new NbtCompound());
-                    ItemStack stack = ItemStack.CODEC.parse(registries.getOps(net.minecraft.nbt.NbtOps.INSTANCE), stackNbt).result().orElse(ItemStack.EMPTY);
-                    inventory.set(slot, stack);
+            // Try new format first (1.21.9), then fall back to old format (1.21.4) for backward compatibility
+            if (root.contains("Items")) {
+                // NEW FORMAT (1.21.9): Items list with Item compound
+                net.minecraft.nbt.NbtList itemsList = root.getListOrEmpty("Items");
+                for (int i = 0; i < itemsList.size(); i++) {
+                    NbtCompound itemNbt = itemsList.getCompound(i).orElse(new NbtCompound());
+                    int slot = itemNbt.getByte("Slot", (byte) 0) & 255;
+                    if (slot >= 0 && slot < inventory.size()) {
+                        NbtCompound stackNbt = itemNbt.getCompound("Item").orElse(new NbtCompound());
+                        ItemStack stack = ItemStack.CODEC.parse(registries.getOps(net.minecraft.nbt.NbtOps.INSTANCE), stackNbt).result().orElse(ItemStack.EMPTY);
+                        inventory.set(slot, stack);
+                    }
+                }
+            } else if (root.contains("Inventory")) {
+                // OLD FORMAT (1.21.4): Direct Inventory list - try to parse it
+                MultiWorldPositions.LOGGER.info("[MWP] Migrating old inventory format for player {}", player.getName().getString());
+                net.minecraft.nbt.NbtList oldList = root.getListOrEmpty("Inventory");
+
+                // The old format was a direct list of ItemStacks - try to parse each one
+                for (int i = 0; i < oldList.size() && i < inventory.size(); i++) {
+                    NbtCompound stackNbt = oldList.getCompound(i).orElse(new NbtCompound());
+                    if (!stackNbt.isEmpty()) {
+                        try {
+                            ItemStack stack = ItemStack.CODEC.parse(registries.getOps(net.minecraft.nbt.NbtOps.INSTANCE), stackNbt).result().orElse(ItemStack.EMPTY);
+                            inventory.set(i, stack);
+                        } catch (Exception e) {
+                            MultiWorldPositions.LOGGER.warn("[MWP] Failed to parse old inventory item at slot {}: {}", i, e.getMessage());
+                        }
+                    }
+                }
+
+                // After successful migration, save in new format
+                try {
+                    NbtCompound newRoot = new NbtCompound();
+                    net.minecraft.nbt.NbtList newItemsList = new net.minecraft.nbt.NbtList();
+                    for (int i = 0; i < inventory.size(); i++) {
+                        ItemStack stack = inventory.get(i);
+                        if (!stack.isEmpty()) {
+                            NbtCompound itemNbt = new NbtCompound();
+                            itemNbt.putByte("Slot", (byte) i);
+                            NbtCompound stackNbt = (NbtCompound) ItemStack.CODEC.encode(stack, registries.getOps(net.minecraft.nbt.NbtOps.INSTANCE), new NbtCompound()).getOrThrow();
+                            itemNbt.put("Item", stackNbt);
+                            newItemsList.add(itemNbt);
+                        }
+                    }
+                    newRoot.put("Items", newItemsList);
+                    newRoot.putInt("XpLevel", root.getInt("XpLevel", 0));
+                    NbtIo.write(newRoot, path);
+                    MultiWorldPositions.LOGGER.info("[MWP] Successfully migrated inventory format for player {}", player.getName().getString());
+                } catch (Exception e) {
+                    MultiWorldPositions.LOGGER.warn("[MWP] Failed to save migrated inventory: {}", e.getMessage());
                 }
             }
 

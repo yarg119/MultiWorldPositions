@@ -40,12 +40,25 @@ public final class TeleportPlacement {
         int ey = (int) Math.floor(desired.y);
         int ez = (int) Math.floor(desired.z);
 
-        if (SafeLocationFinder.isTwoTallAirWithSolidFloor(w, ex, ey, ez)) {
-            calm(player);
-            player.networkHandler.requestTeleport(desired.x, desired.y, desired.z, desired.yaw, desired.pitch);
-            return desired;
+        // First, try the EXACT saved position (including fractional Y)
+        // This is the most accurate - if the player was standing on a block, they should return to that exact spot
+        BlockPos feetPos = new BlockPos(ex, ey, ez);
+        BlockPos headPos = new BlockPos(ex, ey + 1, ez);
+
+        // Check if the exact saved location is safe (air at feet and head level)
+        if (w.getBlockState(feetPos).getCollisionShape(w, feetPos).isEmpty() &&
+            w.getBlockState(headPos).getCollisionShape(w, headPos).isEmpty()) {
+            // Check if there's a solid floor below (at y-1)
+            BlockPos floorPos = new BlockPos(ex, ey - 1, ez);
+            if (w.getBlockState(floorPos).isSolidBlock(w, floorPos) || ey == w.getBottomY()) {
+                // Safe to teleport to exact position
+                calm(player);
+                player.networkHandler.requestTeleport(desired.x, desired.y, desired.z, desired.yaw, desired.pitch);
+                return desired;
+            }
         }
 
+        // If exact position isn't safe, search downward from the saved Y level
         int minY = w.getBottomY();
         for (int y = ey; y >= Math.max(minY, ey - 48); y--) {
             if (SafeLocationFinder.isTwoTallAirWithSolidFloor(w, ex, y, ez)) {
@@ -56,6 +69,7 @@ public final class TeleportPlacement {
             }
         }
 
+        // Last resort: search nearby area
         PositionData near = SafeLocationFinder.findSafeNear(player, targetDim, desired, new BlockPos(ex, ey, ez));
         calm(player);
         player.networkHandler.requestTeleport(near.x, near.y, near.z, near.yaw, near.pitch);
