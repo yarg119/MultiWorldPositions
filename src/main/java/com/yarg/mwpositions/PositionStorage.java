@@ -22,11 +22,13 @@ public class PositionStorage {
         final PositionData pos;
         final boolean inNetherPortalCell; // NEW: nether portal at feet/head
         final boolean inEndPortalCell;    // NEW: end portal at feet/below
-        LastKnown(String dimensionKey, PositionData pos, boolean inNetherPortalCell, boolean inEndPortalCell) {
+        final boolean coolingEnderPearl;  // NEW: player has ender pearl cooldown
+        LastKnown(String dimensionKey, PositionData pos, boolean inNetherPortalCell, boolean inEndPortalCell, boolean coolingEnderPearl) {
             this.dimensionKey = dimensionKey;
             this.pos = pos;
             this.inNetherPortalCell = inNetherPortalCell;
             this.inEndPortalCell = inEndPortalCell;
+            this.coolingEnderPearl = coolingEnderPearl;
         }
     }
 
@@ -250,7 +252,8 @@ public class PositionStorage {
                 || w.getBlockState(feet.up()).isOf(net.minecraft.block.Blocks.NETHER_PORTAL);
         boolean inEnd = w.getBlockState(feet).isOf(net.minecraft.block.Blocks.END_PORTAL)
                 || w.getBlockState(feet.down()).isOf(net.minecraft.block.Blocks.END_PORTAL);
-        lastKnownByPlayer.put(player.getUuid(), new LastKnown(dim, pos, inNether, inEnd));
+        boolean pearlCd = player.getItemCooldownManager().isCoolingDown(new net.minecraft.item.ItemStack(net.minecraft.item.Items.ENDER_PEARL));
+        lastKnownByPlayer.put(player.getUuid(), new LastKnown(dim, pos, inNether, inEnd, pearlCd));
         if (MultiWorldPositions.getConfig().debugMode) {
             // Keep debug light: don't spam every tick; print only occasionally if needed.
         }
@@ -269,6 +272,11 @@ public class PositionStorage {
     public boolean wasInEndPortalCell(java.util.UUID playerId) {
         LastKnown lk = lastKnownByPlayer.get(playerId);
         return lk != null && lk.inEndPortalCell;
+    }
+
+    public boolean hadEnderPearlCooldown(java.util.UUID playerId) {
+        LastKnown lk = lastKnownByPlayer.get(playerId);
+        return lk != null && lk.coolingEnderPearl;
     }
 
     public void saveCachedOriginIfMatches(ServerPlayerEntity player, String originKey) {

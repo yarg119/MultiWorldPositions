@@ -86,7 +86,8 @@ public class MultiWorldPositions implements DedicatedServerModInitializer {
                         String expectedNether = cfg.nextForPortal(g, originKey, PortalKind.NETHER);
                         if (expectedNether != null
                                 && expectedNether.equals(destKey)
-                                && getPositionStorage().wasInNetherPortalCell(player.getUuid())) {
+                                && (getPositionStorage().wasInNetherPortalCell(player.getUuid())
+                                    || getPositionStorage().hadEnderPearlCooldown(player.getUuid()))) {
                             PortalLinkService.markPortalTransfer(player.getUuid());
                             if (cfg.debugMode) {
                                 LOGGER.debug("[MWP] Marked portal transfer (vanilla Nether) for {}: {} -> {}",
@@ -195,6 +196,7 @@ public class MultiWorldPositions implements DedicatedServerModInitializer {
             // Then run restore/redirect logic for the destination
             DimensionChangeListener.handleAfterWorldChange(player, origin, destination);
         });
+
 
         // Register per-tick cache updater for last-known positions
         ServerTickEvents.END_SERVER_TICK.register(server -> {

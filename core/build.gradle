@@ -1,0 +1,20 @@
+plugins {
+    id 'java'
+}
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+    withSourcesJar()
+}
+
+// Point core sources to the existing root src directories to avoid moving files right now
+sourceSets {
+    main {
+        java.srcDirs = ["../src/main/java"]
+        resources.srcDirs = ["../src/main/resources"]
+    }
+}
+
+dependencies {
+    // Keep core free of Minecraft/Fabric runtime deps; compile-only types can be added here if desired.
+}
